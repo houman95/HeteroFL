@@ -319,10 +319,18 @@ for run in range(num_runs):
             print(f"Best number of active users: {best_num_active_users}")
             print(f"Mean Accuracy at Timeframe {timeframe + 1}: {best_accuracy:.2f}%")
 
-# Prepare data for saving
+# Determine memory matrix usage for naming with gamma_momentum
+if use_memory_matrix:
+    gamma_value = str(gamma_momentum[0]).replace('.', '_')  # Replace dot with underscore
+    memory_status = f'{gamma_value}mem'
+else:
+    memory_status = '0mem'
+
+# Prepare data for saving with dynamic folder naming
 current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-save_dir = f"./results10slot6mem_{current_time}"
+save_dir = f"./HeterOracle{num_slots}slots_{memory_status}_{current_time}"
 os.makedirs(save_dir, exist_ok=True)
+
 
 # Save final results
 final_results = []
