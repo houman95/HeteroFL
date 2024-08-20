@@ -9,6 +9,7 @@ import pandas as pd
 import argparse
 import os
 from datetime import datetime
+from utils.noniid_shard import noniid_shard
 import sys
 import random as rnd
 # Start time
@@ -27,7 +28,8 @@ sys.argv = [
     '--num_timeframes', '15',
     '--seeds', '56','85', '12','29','42',
     '--gamma_momentum', '0.6',
-    '--use_memory_matrix', 'true'
+    '--use_memory_matrix', 'true',
+    '--shards_per_client','1'
 ]
 
 # Command-line arguments
@@ -43,7 +45,7 @@ parser.add_argument('--num_timeframes', type=int, default=15, help='Number of ti
 parser.add_argument('--seeds', type=int, nargs='+', default=[85, 12, 29], help='Random seeds for averaging results')
 parser.add_argument('--gamma_momentum', type=float, nargs='+', default=[0.6], help='Momentum for memory matrix')
 parser.add_argument('--use_memory_matrix', type=str, default='true', help='Switch to use memory matrix (true/false)')
-
+parser.add_argument('--shards_per_client', type=int, default=1, help = 'different Classes that each client gets in its datashare')
 args = parser.parse_args()
 
 # Parsed arguments
@@ -58,7 +60,7 @@ num_timeframes = args.num_timeframes
 seeds_for_avg = args.seeds
 gamma_momentum = args.gamma_momentum
 use_memory_matrix = args.use_memory_matrix.lower() == 'true'
-
+shards_per_client = args.shards_per_client
 # Device configuration
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"\n{'*' * 50}\n*** Using device: {device} ***\n{'*' * 50}\n")
@@ -114,19 +116,17 @@ def simulate_transmissions(num_users, transmission_probability):
 def calculate_gradient_difference(w_before, w_after):
     return [w_after[k] - w_before[k] for k in range(len(w_after))]
 
-# Prepare data
-size_of_user_ds = len(trainset) // num_users
-train_data_X = torch.zeros((num_users, size_of_user_ds, 3, 32, 32), device=device)
-train_data_Y = torch.ones((num_users, size_of_user_ds), dtype=torch.long, device=device)
+user_data_indices = noniid_shard(trainset,num_users,shards_per_client)
+# Prepare the data for each user based on the sharded indices
+train_data_X = torch.zeros((num_users, len(user_data_indices[0]), 3, 32, 32), device=device)
+train_data_Y = torch.ones((num_users, len(user_data_indices[0])), dtype=torch.long, device=device)
 
 for i in range(num_users):
-    indices = list(range(size_of_user_ds * i, size_of_user_ds * (i + 1)))
-    subset = torch.utils.data.Subset(trainset, indices)
-    subset_loader = torch.utils.data.DataLoader(subset, batch_size=size_of_user_ds, shuffle=False)
+    subset = torch.utils.data.Subset(trainset, user_data_indices[i])
+    subset_loader = torch.utils.data.DataLoader(subset, batch_size=len(user_data_indices[i]), shuffle=False)
     for data, target in subset_loader:
         train_data_X[i] = data
         train_data_Y[i] = target
-
 # Additional settings
 num_active_users_range = range(1, num_users + 1)
 
